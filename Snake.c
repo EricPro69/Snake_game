@@ -1,22 +1,25 @@
 #include <stdint.h>
 #include "ripes_system.h"
+
 // ==========================================
 // 1. DEFINICIONES DE HARDWARE (MMIO) Y COLORES
 // ==========================================
-#define LED_MATRIX_BASE ((volatile uint32_t *)0xF0000000) 
-#define DPAD_BASE       ((volatile uint32_t *)0xf0000dac)
-#define SWITCH_BASE     ((volatile uint32_t *)0xf0000dbc)
+#define LED_MATRIX_BASE ((volatile uint32_t *)LED_MATRIX_0_BASE)
+#define DPAD_UP         (*(volatile uint32_t *)D_PAD_0_UP)
+#define DPAD_DOWN       (*(volatile uint32_t *)D_PAD_0_DOWN)
+#define DPAD_LEFT       (*(volatile uint32_t *)D_PAD_0_LEFT)
+#define DPAD_RIGHT      (*(volatile uint32_t *)D_PAD_0_RIGHT)
+#define SWITCH_BASE     ((volatile uint32_t *)SWITCHES_0_BASE)
 
-#define COLOR_RED   0x00FF0000
-#define COLOR_GREEN 0x0000FF00
-#define COLOR_BLACK 0x00000000
+#define COLOR_RED    0x00FF0000
+#define COLOR_GREEN  0x0000FF00
+#define COLOR_BLACK  0x00000000
 #define MATRIX_WIDTH 32
-#define GRID_SIZE 16
+#define GRID_SIZE    16
 
 // ==========================================
 // 2. ESTRUCTURAS Y VARIABLES GLOBALES
 // ==========================================
-// Coordenadas de la serpiente, dirección, posición de la manzana, semilla aleatoria
 typedef struct {
     int x;
     int y;
@@ -28,16 +31,29 @@ int dir = 3;
 Point apple;
 uint32_t seed = 12345;
 
-int next_rand(){
+int next_rand() {
     seed = seed * 1103515245 + 12345;
     return (seed >> 16) & 0x7FFF;
 }
 
-
 // ==========================================
 // 3. FUNCIONES DE GRÁFICOS (LED MATRIX)
 // ==========================================
-// draw_block(x, y, color), clear_screen()
+void draw_block(int x, int y, uint32_t color) {
+    int px = x * 2;
+    int py = y * 2;
+    LED_MATRIX_BASE[py * MATRIX_WIDTH + px]             = color;
+    LED_MATRIX_BASE[py * MATRIX_WIDTH + (px + 1)]       = color;
+    LED_MATRIX_BASE[(py + 1) * MATRIX_WIDTH + px]       = color;
+    LED_MATRIX_BASE[(py + 1) * MATRIX_WIDTH + (px + 1)] = color;
+}
+
+void clear_screen() {
+    for (int i = 0; i < MATRIX_WIDTH * MATRIX_WIDTH; i++) {
+        LED_MATRIX_BASE[i] = COLOR_BLACK;
+    }
+}
+
 void spawn_apple() {
     int valid = 0;
     while (!valid) {
@@ -51,38 +67,24 @@ void spawn_apple() {
             }
         }
     }
-}
-
-void draw_block(int x, int y, uint32_t color) {
-    int px = x * 2;
-    int py = y * 2;
-    LED_MATRIX_BASE[py * MATRIX_WIDTH + px] = color;
-    LED_MATRIX_BASE[py * MATRIX_WIDTH + (px + 1)] = color;
-    LED_MATRIX_BASE[(py + 1) * MATRIX_WIDTH + px] = color;
-    LED_MATRIX_BASE[(py + 1) * MATRIX_WIDTH + (px + 1)] = color;
-}
-
-void clear_screen() {
-    for(int i = 0; i < MATRIX_WIDTH * MATRIX_WIDTH; i++) {
-        LED_MATRIX_BASE[i] = COLOR_BLACK;
-    }
+    draw_block(apple.x, apple.y, COLOR_GREEN);
 }
 
 // ==========================================
 // 4. FUNCIONES DE ENTRADA (D-PAD Y SWITCH 0)
 // ==========================================
-// read_dpad(), wait_for_reset()
 int read_dpad(int current_dir) {
-    if(DPAD_BASE[0] && current_dir != 1) return 0; // Arriba
-    if(DPAD_BASE[1] && current_dir != 0) return 1; // Abajo
-    if(DPAD_BASE[2] && current_dir != 3) return 2; // Izquierda
-    if(DPAD_BASE[3] && current_dir != 2) return 3; //derecha
+    if (DPAD_UP && current_dir != 1)    return 0; // Arriba
+    if (DPAD_DOWN && current_dir != 0)  return 1; // Abajo
+    if (DPAD_LEFT && current_dir != 3)  return 2; // Izquierda
+    if (DPAD_RIGHT && current_dir != 2) return 3; // Derecha
     return current_dir;
 }
 
-int is_switch0_on(){
+int is_switch0_on() {
     return (SWITCH_BASE[0] & 0x1);
 }
+
 // ==========================================
 // 5. LÓGICA DEL JUEGO Y MAIN
 // ==========================================
@@ -90,16 +92,38 @@ int main() {
     clear_screen();
     snake[0].x = 5;
     snake[0].y = 5;
+    draw_block(snake[0].x, snake[0].y, COLOR_RED);
+    spawn_apple();
 
     while (1) {
+        for (volatile int i = 0; i < 800; i++) {
+            dir = read_dpad(dir);
+        }
+        int next_x = snake[0].x;
+        int next_y = snake[0].y;
+
+        if (dir == 0)      next_y -= 1;
+        else if (dir == 1) next_y += 1;
+        else if (dir == 2) next_x -= 1;
+        else if (dir == 3) next_x += 1;
+
+        if (next_x < 0 || next_x >= GRID_SIZE || next_y < 0 || next_y >= GRID_SIZE) {
+            while (!is_switch0_on());
+            while (is_switch0_on());
+
+            clear_screen();
+            snake[0].x = 5;
+            snake[0].y = 5;
+            dir = 3;
+            draw_block(snake[0].x, snake[0].y, COLOR_RED);
+            spawn_apple();
+            continue;
+        }
+
         draw_block(snake[0].x, snake[0].y, COLOR_BLACK);
-        dir = read_dpad(dir);
-        if(dir == 0) snake[0].y -= 1;
-        else if(dir == 1) snake[0].y += 1; 
-        else if(dir == 2) snake[0].x -= 1; 
-        else if(dir == 3) snake[0].x += 1; 
+        snake[0].x = next_x;
+        snake[0].y = next_y;
         draw_block(snake[0].x, snake[0].y, COLOR_RED);
-        for (volatile int i = 0; i < 150000; i++);
     }
 
     return 0;
