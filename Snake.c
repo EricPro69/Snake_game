@@ -13,6 +13,7 @@
 
 #define COLOR_RED    0x00FF0000
 #define COLOR_GREEN  0x0000FF00
+#define COLOR_PURPLE 0x00800080
 #define COLOR_BLACK  0x00000000
 #define MATRIX_WIDTH 32
 #define GRID_SIZE    16
@@ -115,10 +116,8 @@ int main() {
 
         int ate_apple = (next_x == apple.x && next_y == apple.y);
 
-        // Verificar colisión con bordes
         int hit = (next_x < 0 || next_x >= GRID_SIZE || next_y < 0 || next_y >= GRID_SIZE);
 
-        // Verificar colisión con el propio cuerpo
         int check_limit = ate_apple ? snake_length : snake_length - 1;
         for (int i = 0; i < check_limit; i++) {
             if (snake[i].x == next_x && snake[i].y == next_y) {
@@ -127,9 +126,14 @@ int main() {
             }
         }
 
+        // Game Over: pintar de morado y esperar cambio en Switch 0
         if (hit) {
-            while (!is_switch0_on());
-            while (is_switch0_on());
+            for (int i = 0; i < snake_length; i++) {
+                draw_block(snake[i].x, snake[i].y, COLOR_PURPLE);
+            }
+
+            int sw_state = is_switch0_on();
+            while (is_switch0_on() == sw_state);
 
             clear_screen();
             snake[0].x = 5;
@@ -157,8 +161,8 @@ int main() {
 
         if (ate_apple) {
             if (snake_length >= GRID_SIZE * GRID_SIZE) {
-                while (!is_switch0_on());
-                while (is_switch0_on());
+                int sw_state = is_switch0_on();
+                while (is_switch0_on() == sw_state);
 
                 clear_screen();
                 snake[0].x = 5;
