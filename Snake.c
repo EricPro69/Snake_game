@@ -17,6 +17,7 @@
 #define COLOR_BLACK  0x00000000
 #define MATRIX_WIDTH 32
 #define GRID_SIZE    16
+#define GAME_SPEED   500
 
 // ==========================================
 // 2. ESTRUCTURAS Y VARIABLES GLOBALES
@@ -29,6 +30,9 @@ typedef struct {
 Point snake[GRID_SIZE * GRID_SIZE];
 int snake_length = 1;
 int dir = 3;
+int next_dir = 3;
+int input_locked = 0;
+int last_btn = 0;
 Point apple;
 uint32_t seed = 12345;
 
@@ -76,12 +80,47 @@ void spawn_apple() {
 // ==========================================
 // 4. FUNCIONES DE ENTRADA (D-PAD Y SWITCH 0)
 // ==========================================
-int read_dpad(int current_dir) {
-    if (DPAD_UP && current_dir != 1)    return 0; // Arriba
-    if (DPAD_DOWN && current_dir != 0)  return 1; // Abajo
-    if (DPAD_LEFT && current_dir != 3)  return 2; // Izquierda
-    if (DPAD_RIGHT && current_dir != 2) return 3; // Derecha
-    return current_dir;
+void poll_dpad() {
+    int up    = DPAD_UP    ? 1 : 0;
+    int down  = DPAD_DOWN  ? 1 : 0;
+    int left  = DPAD_LEFT  ? 1 : 0;
+    int right = DPAD_RIGHT ? 1 : 0;
+    int pressed = up + down + left + right;
+
+    if (pressed == 0) {
+        last_btn = 0;
+        return;
+    }
+
+    if (pressed > 1) {
+        last_btn = -1;
+        return;
+    }
+
+    int btn = 0;
+    if (up)         btn = 1;
+    else if (down)  btn = 2;
+    else if (left)  btn = 3;
+    else if (right) btn = 4;
+
+    if (btn == last_btn) return;
+    last_btn = btn;
+
+    if (input_locked) return;
+
+    if (btn == 1 && dir != 0 && dir != 1) {
+        next_dir = 0;
+        input_locked = 1;
+    } else if (btn == 2 && dir != 1 && dir != 0) {
+        next_dir = 1;
+        input_locked = 1;
+    } else if (btn == 3 && dir != 2 && dir != 3) {
+        next_dir = 2;
+        input_locked = 1;
+    } else if (btn == 4 && dir != 3 && dir != 2) {
+        next_dir = 3;
+        input_locked = 1;
+    }
 }
 
 int is_switch0_on() {
@@ -97,14 +136,19 @@ int main() {
     snake[0].y = 5;
     snake_length = 1;
     dir = 3;
+    next_dir = 3;
+    input_locked = 0;
+    last_btn = 0;
     draw_block(snake[0].x, snake[0].y, COLOR_RED);
     spawn_apple();
 
     while (1) {
-        int current_dir = dir;
-        for (volatile int i = 0; i < 800; i++) {
-            dir = read_dpad(current_dir);
+        for (volatile int i = 0; i < GAME_SPEED; i++) {
+            poll_dpad();
         }
+
+        dir = next_dir;
+        input_locked = 0;
 
         int next_x = snake[0].x;
         int next_y = snake[0].y;
@@ -113,6 +157,8 @@ int main() {
         else if (dir == 1) next_y += 1;
         else if (dir == 2) next_x -= 1;
         else if (dir == 3) next_x += 1;
+
+        poll_dpad();
 
         int ate_apple = (next_x == apple.x && next_y == apple.y);
 
@@ -126,7 +172,6 @@ int main() {
             }
         }
 
-        // Game Over: pintar de morado y esperar cambio en Switch 0
         if (hit) {
             for (int i = 0; i < snake_length; i++) {
                 draw_block(snake[i].x, snake[i].y, COLOR_PURPLE);
@@ -140,6 +185,9 @@ int main() {
             snake[0].y = 5;
             snake_length = 1;
             dir = 3;
+            next_dir = 3;
+            input_locked = 0;
+            last_btn = 0;
             draw_block(snake[0].x, snake[0].y, COLOR_RED);
             spawn_apple();
             continue;
@@ -159,6 +207,8 @@ int main() {
         snake[0].y = next_y;
         draw_block(snake[0].x, snake[0].y, COLOR_RED);
 
+        poll_dpad();
+
         if (ate_apple) {
             if (snake_length >= GRID_SIZE * GRID_SIZE) {
                 int sw_state = is_switch0_on();
@@ -169,6 +219,9 @@ int main() {
                 snake[0].y = 5;
                 snake_length = 1;
                 dir = 3;
+                next_dir = 3;
+                input_locked = 0;
+                last_btn = 0;
                 draw_block(snake[0].x, snake[0].y, COLOR_RED);
                 spawn_apple();
             } else {
