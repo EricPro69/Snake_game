@@ -55,6 +55,8 @@ void clear_screen() {
 }
 
 void spawn_apple() {
+    if (snake_length >= GRID_SIZE * GRID_SIZE) return;
+
     int valid = 0;
     while (!valid) {
         apple.x = next_rand() % GRID_SIZE;
@@ -92,13 +94,17 @@ int main() {
     clear_screen();
     snake[0].x = 5;
     snake[0].y = 5;
+    snake_length = 1;
+    dir = 3;
     draw_block(snake[0].x, snake[0].y, COLOR_RED);
     spawn_apple();
 
     while (1) {
+        int current_dir = dir;
         for (volatile int i = 0; i < 800; i++) {
-            dir = read_dpad(dir);
+            dir = read_dpad(current_dir);
         }
+
         int next_x = snake[0].x;
         int next_y = snake[0].y;
 
@@ -107,23 +113,64 @@ int main() {
         else if (dir == 2) next_x -= 1;
         else if (dir == 3) next_x += 1;
 
-        if (next_x < 0 || next_x >= GRID_SIZE || next_y < 0 || next_y >= GRID_SIZE) {
+        int ate_apple = (next_x == apple.x && next_y == apple.y);
+
+        // Verificar colisión con bordes
+        int hit = (next_x < 0 || next_x >= GRID_SIZE || next_y < 0 || next_y >= GRID_SIZE);
+
+        // Verificar colisión con el propio cuerpo
+        int check_limit = ate_apple ? snake_length : snake_length - 1;
+        for (int i = 0; i < check_limit; i++) {
+            if (snake[i].x == next_x && snake[i].y == next_y) {
+                hit = 1;
+                break;
+            }
+        }
+
+        if (hit) {
             while (!is_switch0_on());
             while (is_switch0_on());
 
             clear_screen();
             snake[0].x = 5;
             snake[0].y = 5;
+            snake_length = 1;
             dir = 3;
             draw_block(snake[0].x, snake[0].y, COLOR_RED);
             spawn_apple();
             continue;
         }
 
-        draw_block(snake[0].x, snake[0].y, COLOR_BLACK);
+        if (!ate_apple) {
+            draw_block(snake[snake_length - 1].x, snake[snake_length - 1].y, COLOR_BLACK);
+        } else {
+            snake_length++;
+        }
+
+        for (int i = snake_length - 1; i > 0; i--) {
+            snake[i] = snake[i - 1];
+        }
+
         snake[0].x = next_x;
         snake[0].y = next_y;
         draw_block(snake[0].x, snake[0].y, COLOR_RED);
+
+        if (ate_apple) {
+            if (snake_length >= GRID_SIZE * GRID_SIZE) {
+                while (!is_switch0_on());
+                while (is_switch0_on());
+
+                clear_screen();
+                snake[0].x = 5;
+                snake[0].y = 5;
+                snake_length = 1;
+                dir = 3;
+                draw_block(snake[0].x, snake[0].y, COLOR_RED);
+                spawn_apple();
+            } else {
+                spawn_apple();
+            }
+        }
     }
 
     return 0;
